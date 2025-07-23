@@ -41,6 +41,8 @@ fn main() -> Result<()> {
 
 struct FileWatcher {
     rx: mpsc::Receiver<notify::Result<Event>>,
+    // just here to keep the watcher alive
+    #[allow(dead_code)]
     watcher: notify::RecommendedWatcher,
     magic_token: String,
     output_file_extension: String,
@@ -73,7 +75,7 @@ impl FileWatcher {
     }
 
     fn handle_file_change(&self, path: &Path) -> Result<()> {
-        if path.extension().unwrap_or_default().to_str().unwrap().ends_with(&self.output_file_extension) {
+        if path.to_str().unwrap().ends_with(&self.output_file_extension) {
             return Ok(());
         }
 

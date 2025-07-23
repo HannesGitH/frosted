@@ -18,6 +18,9 @@
           src = ./.;
           cargoLock = {
             lockFile = ./Cargo.lock;
+            outputHashes = {
+              "tree-sitter-dart-0.0.1" = "sha256-6TJV4N0YKufvMJh81stpKGaxmFTzeFwoEz5t07yXS24=";
+            };
           };
           nativeBuildInputs = [
             pkg-config
