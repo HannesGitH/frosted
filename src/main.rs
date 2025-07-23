@@ -22,7 +22,11 @@ struct Args {
 
     /// file extension to name the generated file
     #[arg(short, long, value_name = "OUTPUT", default_value = "copy.gen.dart")]
-    file_extension: String,
+    output_file_extension: String,
+
+    /// files extensions to watch for changes
+    #[arg(short, long, value_name = "EXTENSIONS", default_value = "dart")]
+    file_extensions: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -30,9 +34,10 @@ fn main() -> Result<()> {
 
     let directory = args.directory;
     let magic_token = args.magic_token;
-    let output_file_extension = args.file_extension;
+    let output_file_extension = args.output_file_extension;
+    let file_extensions = args.file_extensions;
 
-    let file_watcher = FileWatcher::new(&directory, &magic_token, &output_file_extension)?;
+    let file_watcher = FileWatcher::new(&directory, &magic_token, &output_file_extension, &file_extensions)?;
 
     // this will run forever
     file_watcher.run()
@@ -46,15 +51,16 @@ struct FileWatcher {
     watcher: notify::RecommendedWatcher,
     magic_token: String,
     output_file_extension: String,
+    allowed_watch_extensions: Vec<String>,
 }
 
 impl FileWatcher {
-    fn new(directory: &Path, magic_token: &str, output_file_extension: &str) -> Result<Self> {
+    fn new(directory: &Path, magic_token: &str, output_file_extension: &str, file_extensions: &[String]) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
         let mut watcher = notify::recommended_watcher(tx)?;
         watcher.watch(Path::new(&directory), RecursiveMode::Recursive)?;
         // keep the watcher alive
-        Ok(Self { rx, watcher, magic_token: magic_token.to_string(), output_file_extension: output_file_extension.to_string() })
+        Ok(Self { rx, watcher, magic_token: magic_token.to_string(), output_file_extension: output_file_extension.to_string(), allowed_watch_extensions: file_extensions.to_vec() })
     }
 
     fn run(&self) -> Result<()> {
@@ -76,6 +82,10 @@ impl FileWatcher {
 
     fn handle_file_change(&self, path: &Path) -> Result<()> {
         if path.to_str().unwrap().ends_with(&self.output_file_extension) {
+            return Ok(());
+        }
+
+        if !self.allowed_watch_extensions.iter().any(|ext| path.extension().unwrap_or_default().to_str().unwrap().ends_with(ext)) {
             return Ok(());
         }
 
