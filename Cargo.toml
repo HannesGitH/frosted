@@ -4,3 +4,8 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
+tree-sitter = "0.25.0"
+tree-sitter-dart = { git = "https://github.com/cfping/tree-sitter-dart"} # temporary fork, better use upstream: https://github.com/UserNobody14/tree-sitter-dart when they update their tree-sitter to 0.25 
+
+[build-dependencies]
+cc="*"
