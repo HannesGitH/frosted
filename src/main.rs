@@ -1,5 +1,5 @@
 use notify::{event::{DataChange, ModifyKind}, Event, EventKind, RecursiveMode, Watcher};
-use std::{fs::File, io::{BufReader, Read}, path::Path, sync::mpsc};
+use std::{fs::File, io::{BufReader, Read, Write}, path::Path, sync::mpsc};
 use clap::Parser;
 use std::path::PathBuf;
 use anyhow::Result;
@@ -19,6 +19,10 @@ struct Args {
     /// magic token to identify the files to parse
     #[arg(short, long, value_name = "TOKEN", default_value = "+mk:")]
     magic_token: String,
+
+    /// file extension to name the generated file
+    #[arg(short, long, value_name = "OUTPUT", default_value = "copy.gen.dart")]
+    file_extension: String,
 }
 
 fn main() -> Result<()> {
@@ -26,8 +30,9 @@ fn main() -> Result<()> {
 
     let directory = args.directory;
     let magic_token = args.magic_token;
+    let output_file_extension = args.file_extension;
 
-    let file_watcher = FileWatcher::new(&directory, &magic_token)?;
+    let file_watcher = FileWatcher::new(&directory, &magic_token, &output_file_extension)?;
 
     // this will run forever
     file_watcher.run()
@@ -38,15 +43,16 @@ struct FileWatcher {
     rx: mpsc::Receiver<notify::Result<Event>>,
     watcher: notify::RecommendedWatcher,
     magic_token: String,
+    output_file_extension: String,
 }
 
 impl FileWatcher {
-    fn new(directory: &Path, magic_token: &str) -> Result<Self> {
+    fn new(directory: &Path, magic_token: &str, output_file_extension: &str) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
         let mut watcher = notify::recommended_watcher(tx)?;
         watcher.watch(Path::new(&directory), RecursiveMode::Recursive)?;
         // keep the watcher alive
-        Ok(Self { rx, watcher, magic_token: magic_token.to_string() })
+        Ok(Self { rx, watcher, magic_token: magic_token.to_string(), output_file_extension: output_file_extension.to_string() })
     }
 
     fn run(&self) -> Result<()> {
@@ -67,6 +73,10 @@ impl FileWatcher {
     }
 
     fn handle_file_change(&self, path: &Path) -> Result<()> {
+        if path.extension().unwrap_or_default().to_str().unwrap().ends_with(&self.output_file_extension) {
+            return Ok(());
+        }
+
         self.parse_file(path)?;
         Ok(())
     }
@@ -79,8 +89,15 @@ impl FileWatcher {
     
         println!("parsing file: {:?}", path);
         let classes = parse::parse(&code, &self.magic_token)?;
-        println!("classes: {:?}", classes);
 
+        if classes.is_empty() {
+            return Ok(());
+        }
+
+        let generated = generate::generate(&classes, path.file_name().unwrap().to_str().unwrap())?;
+        let output_path = path.with_extension(&self.output_file_extension);
+        let mut file = File::create(output_path)?;
+        file.write_all(generated.as_bytes())?;
         
         Ok(())
     }

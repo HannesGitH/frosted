@@ -1,0 +1,30 @@
+// generated file, do not edit
+
+part of '{{file_name}}';
+
+{{#each classes}}
+// ------------------------------------------------------------
+
+extension {{class_name}}CopyWith on {{class_name}} {
+  {{class_name}} Function({
+    {{#each fields}}
+    {{type_str_nullable}} {{name_str}},
+    {{/each}}
+  }) get copyWith => ({
+        {{#each fields}}
+        Object? {{name_str}} = Never,
+        {{/each}}
+      }) =>
+          {{class_name}}(
+            {{#each fields}}
+            {{name_str}}: {{name_str}}._or(this.{{name_str}}),
+            {{/each}}
+          );
+}
+{{/each}}
+// ------------------------------------------------------------
+
+extension on Object? {
+  // T? _as<T>() => this is T ? this as T : null;
+  T _or<T>(T other) => this is T ? this as T : other;
+}
