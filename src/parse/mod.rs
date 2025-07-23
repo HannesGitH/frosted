@@ -1,15 +1,16 @@
 use crate::types::{Class, Field};
 use tree_sitter::{Parser, Tree};
 use tree_sitter_dart::language;
+use anyhow::Result;
 
-pub fn get_tree(code: &str) -> Result<Tree, String> {
+pub fn get_tree(code: &str) -> Result<Tree> {
     let mut parser = Parser::new();
-    parser.set_language(&language()).map_err(|e| e.to_string())?;
-    let tree = parser.parse(code, None).ok_or("Error parsing Dart code")?;
+    parser.set_language(&language())?;
+    let tree = parser.parse(code, None).ok_or(anyhow::anyhow!("Error parsing Dart code"))?;
     Ok(tree)
 }
 
-pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>, String> {
+pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> {
     let tree = get_tree(code)?;
     let root_node = tree.root_node();
     let mut cursor = root_node.walk();
