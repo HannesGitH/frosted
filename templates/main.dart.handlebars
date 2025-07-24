@@ -43,5 +43,6 @@ extension {{class_name}}CopyWith on {{class_name}} {
 
 extension on Object? {
   // T? _as<T>() => this is T ? this as T : null;
+  // ignore: unused_element
   T _or<T>(T other) => this is T ? this as T : other;
 }
