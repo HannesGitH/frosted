@@ -1,4 +1,4 @@
-use crate::types::{Class, Field};
+use crate::types::{Class, CopyWithClassType, Field};
 use tree_sitter::{Parser, Tree};
 use tree_sitter_dart::language;
 use anyhow::Result;
@@ -24,10 +24,16 @@ pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> 
     loop {
         if cursor.node().kind() == "class_definition" {
             if prev_node.kind() != "comment" {continue};
-            if !prev_node.utf8_text(&code.as_bytes()).unwrap().contains(magic_token) {continue};
+            let comment = prev_node.utf8_text(&code.as_bytes()).unwrap();
+            if !comment.contains(magic_token) {continue};
+            let copy_with_class_type = if comment.contains("+mk:copyWithMixin") {
+                CopyWithClassType::Mixin
+            } else {
+                CopyWithClassType::Extension
+            };
             let class_name = cursor.node().child_by_field_name("name").unwrap().utf8_text(&code.as_bytes()).unwrap();
             let class_body = cursor.node().child_by_field_name("body").unwrap();
-            classes_to_parse.push((class_name, class_body));
+            classes_to_parse.push((class_name, class_body, copy_with_class_type));
         }
         prev_node = cursor.node();
         if !cursor.goto_next_sibling() {
@@ -37,7 +43,7 @@ pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> 
 
     // now get the fields in these classes
     let mut classes_with_fields = Vec::new();
-    for (class_name, class_body) in classes_to_parse {
+    for (class_name, class_body, copy_with_class_type) in classes_to_parse {
         let mut fields = Vec::new();
         let mut cursor = class_body.walk();
         let field_declarations = class_body.named_children(&mut cursor).filter(|node|node.kind() == "declaration").collect::<Vec<_>>();
@@ -65,6 +71,7 @@ pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> 
         classes_with_fields.push(Class {
             name_str: class_name,
             fields,
+            copy_with_class_type,
         });
     }
 
