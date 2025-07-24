@@ -10,7 +10,7 @@ pub fn get_tree(code: &str) -> Result<Tree> {
     Ok(tree)
 }
 
-pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> {
+pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
     let tree = get_tree(code)?;
     let root_node = tree.root_node();
     let mut cursor = root_node.walk();
@@ -53,8 +53,22 @@ pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> 
             let mut field_is_nullable = false;
             for child in field_declaration.named_children(&mut cursor) {
                 if child.kind() == "type_identifier" {
-                    field_type = Some(child.utf8_text(&code.as_bytes()).unwrap());
-                } else if child.kind() == "nullable_type" {
+                    field_type = Some(child.utf8_text(&code.as_bytes()).unwrap().to_string());
+                } else if child.kind() == "type_arguments" {
+                    let mut cursor = child.walk();
+                    let mut inner_is_nullable = false;
+                    let mut inner_type = None;
+                    for inner_child in child.named_children(&mut cursor) {
+                        if inner_child.kind() == "type_identifier" {
+                            inner_type = Some(inner_child.utf8_text(&code.as_bytes()).unwrap());
+                        } else if inner_child.kind() == "nullable_type" {
+                            inner_is_nullable = true;
+                        }
+                    }
+                    if let Some(inner_type) = inner_type {
+                        field_type = Some(format!("{}<{}{}>", field_type.unwrap(), inner_type, if inner_is_nullable { "?" } else { "" }));
+                    }
+                }else if child.kind() == "nullable_type" {
                     field_is_nullable = true;
                 } else if child.kind() == "initialized_identifier_list" {
                     field_name = child.named_child(0).unwrap().utf8_text(&code.as_bytes()).ok();
@@ -62,14 +76,14 @@ pub fn parse<'a>(code: &'a str, magic_token: &'a str) -> Result<Vec<Class<'a>>> 
             }
             if let (Some(name_str), Some(type_str)) = (field_name, field_type) {
                 fields.push(Field {
-                    name_str,
+                    name_str: name_str.to_string(),
                     type_str,
                     is_nullable: field_is_nullable,
                 });
             };
         }
         classes_with_fields.push(Class {
-            name_str: class_name,
+            name_str: class_name.to_string(),
             fields,
             copy_with_class_type,
         });
@@ -87,7 +101,7 @@ mod tests {
     fn test_get_tree_in1() {
         let code = include_str!("../../test/in1.dart");
         let tree = get_tree(code).unwrap();
-        assert_eq!(tree.root_node().to_sexp(), "(program (comment) (import_or_export (library_export (configurable_uri (uri (string_literal))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))) (comment) (class_definition name: (identifier) superclass: (superclass (type_identifier)) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (super_formal_parameter (super) (identifier))) (formal_parameter (super_formal_parameter (super) (identifier))) (formal_parameter (super_formal_parameter (super) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))))");
+        assert_eq!(tree.root_node().to_sexp(), "(program (comment) (import_or_export (library_export (configurable_uri (uri (string_literal))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier) (nullable_type)) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier)) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier)) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))))");
     }
 
     #[test]

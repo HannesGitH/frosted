@@ -4,28 +4,26 @@ export 'preview.copy.gen.dart';
 
 // +mk:copyWithMixin
 class UiInsurancePreviewSimpleDataModel {
-  final String title;
-  final String cta;
-  final String? image;
+  final String? title;
+  final Set<String?> cta;
+  final List<String>? image;
+  final List<String> image2;
 
   const UiInsurancePreviewSimpleDataModel({
     required this.title,
     required this.cta,
     required this.image,
+    required this.image2,
   });
 }
 
 // +mk:copyWith
-class UiInsurancePreviewDataModel extends UiInsurancePreviewSimpleDataModel {
+class UiInsurancePreviewDataModel {
   final String? avatar;
   final String tagType;
 
   const UiInsurancePreviewDataModel({
     required this.avatar,
-    required super.title,
-
-    required super.cta,
-    required super.image,
     required this.tagType,
   });
 }

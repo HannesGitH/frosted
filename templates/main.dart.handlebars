@@ -7,7 +7,7 @@ part of '{{file_name}}';
 {{#if is_mixin}}
 mixin {{class_name}}CopyWith {
   {{#each fields}}
-  {{type_str_nullable}} get {{name_str}};
+  {{{type_str_nullable}}} get {{name_str}};
   {{/each}}
 
   {{class_name}} copyWith({
@@ -16,7 +16,7 @@ mixin {{class_name}}CopyWith {
     {{/each}}
   }) => {{class_name}}(
     {{#each fields}}
-    {{name_str}}: {{name_str}} {{#if is_nullable}} | {{else}} ?? {{/if}} this.{{name_str}},
+    {{{name_str}}}: {{name_str}} {{#if is_nullable}} | {{else}} ?? {{/if}} this.{{name_str}},
     {{/each}}
   );
 }
@@ -24,7 +24,7 @@ mixin {{class_name}}CopyWith {
 extension {{class_name}}CopyWith on {{class_name}} {
   {{class_name}} Function({
     {{#each fields}}
-    {{type_str_nullable}} {{name_str}},
+    {{{type_str_nullable}}} {{name_str}},
     {{/each}}
   }) get copyWith => ({
         {{#each fields}}
@@ -33,7 +33,7 @@ extension {{class_name}}CopyWith on {{class_name}} {
       }) =>
           {{class_name}}(
             {{#each fields}}
-            {{name_str}}: {{name_str}}._or(this.{{name_str}}),
+            {{{name_str}}}: {{name_str}}._or(this.{{name_str}}),
             {{/each}}
           );
 }

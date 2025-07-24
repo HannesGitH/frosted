@@ -39,22 +39,7 @@
                     type_identifier
                 )
                 (
-                    initialized_identifier_list
-                    (
-                        initialized_identifier
-                        (
-                            identifier
-                        )
-                    )
-                )
-            )
-            (
-                declaration
-                (
-                    final_builtin
-                )
-                (
-                    type_identifier
+                    nullable_type
                 )
                 (
                     initialized_identifier_list
@@ -73,9 +58,66 @@
                 )
                 (
                     type_identifier
+                )
+                (
+                    type_arguments
+                    (
+                        type_identifier
+                    )
+                    (
+                        nullable_type
+                    )
+                )
+                (
+                    initialized_identifier_list
+                    (
+                        initialized_identifier
+                        (
+                            identifier
+                        )
+                    )
+                )
+            )
+            (
+                declaration
+                (
+                    final_builtin
+                )
+                (
+                    type_identifier
+                )
+                (
+                    type_arguments
+                    (
+                        type_identifier
+                    )
                 )
                 (
                     nullable_type
+                )
+                (
+                    initialized_identifier_list
+                    (
+                        initialized_identifier
+                        (
+                            identifier
+                        )
+                    )
+                )
+            )
+            (
+                declaration
+                (
+                    final_builtin
+                )
+                (
+                    type_identifier
+                )
+                (
+                    type_arguments
+                    (
+                        type_identifier
+                    )
                 )
                 (
                     initialized_identifier_list
@@ -137,6 +179,18 @@
                                     )
                                 )
                             )
+                            (
+                                formal_parameter
+                                (
+                                    constructor_param
+                                    (
+                                        this
+                                    )
+                                    (
+                                        identifier
+                                    )
+                                )
+                            )
                         )
                     )
                 )
@@ -151,13 +205,6 @@
         name:
         (
             identifier
-        )
-        superclass:
-        (
-            superclass
-            (
-                type_identifier
-            )
         )
         body:
         (
@@ -221,42 +268,6 @@
                                     constructor_param
                                     (
                                         this
-                                    )
-                                    (
-                                        identifier
-                                    )
-                                )
-                            )
-                            (
-                                formal_parameter
-                                (
-                                    super_formal_parameter
-                                    (
-                                        super
-                                    )
-                                    (
-                                        identifier
-                                    )
-                                )
-                            )
-                            (
-                                formal_parameter
-                                (
-                                    super_formal_parameter
-                                    (
-                                        super
-                                    )
-                                    (
-                                        identifier
-                                    )
-                                )
-                            )
-                            (
-                                formal_parameter
-                                (
-                                    super_formal_parameter
-                                    (
-                                        super
                                     )
                                     (
                                         identifier

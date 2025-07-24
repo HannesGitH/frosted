@@ -1,19 +1,19 @@
 // generated file, do not edit
 
-part of 'in2.model.dart';
+part of 'in1.dart';
 
 // ------------------------------------------------------------
 mixin UiInsurancePreviewSimpleDataModelCopyWith {
   String? get title;
-  Set<String?> get cta;
-  List<String>? get image;
-  List<String> get image2;
+  Set get cta;
+  List? get image;
+  List get image2;
 
   UiInsurancePreviewSimpleDataModel copyWith({
     NullableValue<String?>? title,
-    Set<String?>? cta,
-    NullableValue<List<String>?>? image,
-    List<String>? image2,
+    Set? cta,
+    NullableValue<List?>? image,
+    List? image2,
   }) => UiInsurancePreviewSimpleDataModel(
     title: title  |  this.title,
     cta: cta  ??  this.cta,
