@@ -3,25 +3,22 @@
 part of 'in2.model.dart';
 
 // ------------------------------------------------------------
+mixin UiInsurancePreviewSimpleDataModelCopyWith {
+  String get title;
+  String get cta;
+  String? get image;
 
-extension UiInsurancePreviewSimpleDataModelCopyWith on UiInsurancePreviewSimpleDataModel {
-  UiInsurancePreviewSimpleDataModel Function({
-    String title,
-    String cta,
-    String? image,
-  }) get copyWith => ({
-        Object? title = Never,
-        Object? cta = Never,
-        Object? image = Never,
-      }) =>
-          UiInsurancePreviewSimpleDataModel(
-            title: title._or(this.title),
-            cta: cta._or(this.cta),
-            image: image._or(this.image),
-          );
+  UiInsurancePreviewSimpleDataModel copyWith({
+    String? title,
+    String? cta,
+    NullableValue<String?>? image,
+  }) => UiInsurancePreviewSimpleDataModel(
+    title: title  ??  this.title,
+    cta: cta  ??  this.cta,
+    image: image  |  this.image,
+  );
 }
 // ------------------------------------------------------------
-
 extension UiInsurancePreviewDataModelCopyWith on UiInsurancePreviewDataModel {
   UiInsurancePreviewDataModel Function({
     String? avatar,

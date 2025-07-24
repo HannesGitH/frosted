@@ -12,11 +12,11 @@ mixin {{class_name}}CopyWith {
 
   {{class_name}} copyWith({
     {{#each fields}}
-    {{type_str_wrapped_nullable_value}} {{name_str}},
+    {{{type_str_wrapped_nullable_value}}} {{name_str}},
     {{/each}}
   }) => {{class_name}}(
     {{#each fields}}
-    {{name_str}}: {{name_str}} {{#if is_nullable}} / {{else}} ?? {{/if}} this.{{name_str}},
+    {{name_str}}: {{name_str}} {{#if is_nullable}} | {{else}} ?? {{/if}} this.{{name_str}},
     {{/each}}
   );
 }

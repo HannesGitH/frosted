@@ -3,6 +3,8 @@ use std::{fs::File, io::{BufReader, Read, Write}, path::Path, sync::mpsc};
 use clap::Parser;
 use std::path::PathBuf;
 use anyhow::Result;
+
+use crate::generate::Generator;
 mod parse;
 mod generate;
 mod types;
@@ -44,7 +46,7 @@ fn main() -> Result<()> {
 }
 
 
-struct FileWatcher {
+struct FileWatcher<'a> {
     rx: mpsc::Receiver<notify::Result<Event>>,
     // just here to keep the watcher alive
     #[allow(dead_code)]
@@ -52,15 +54,18 @@ struct FileWatcher {
     magic_token: String,
     output_file_extension: String,
     allowed_watch_extensions: Vec<String>,
+    generator: Generator<'a>,
 }
 
-impl FileWatcher {
+impl<'a> FileWatcher<'a> {
     fn new(directory: &Path, magic_token: &str, output_file_extension: &str, file_extensions: &[String]) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
         let mut watcher = notify::recommended_watcher(tx)?;
         watcher.watch(Path::new(&directory), RecursiveMode::Recursive)?;
+
+        let generator = Generator::new()?;
         // keep the watcher alive
-        Ok(Self { rx, watcher, magic_token: magic_token.to_string(), output_file_extension: output_file_extension.to_string(), allowed_watch_extensions: file_extensions.to_vec() })
+        Ok(Self { rx, watcher, magic_token: magic_token.to_string(), output_file_extension: output_file_extension.to_string(), allowed_watch_extensions: file_extensions.to_vec(), generator })
     }
 
     fn run(&self) -> Result<()> {
@@ -106,7 +111,7 @@ impl FileWatcher {
             return Ok(());
         }
 
-        let generated = generate::generate(&classes, path.file_name().unwrap().to_str().unwrap())?;
+        let generated = self.generator.generate(&classes, path.file_name().unwrap().to_str().unwrap())?;
         let output_path = path.with_extension(&self.output_file_extension);
         let mut file = File::create(output_path)?;
         file.write_all(generated.as_bytes())?;

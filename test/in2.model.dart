@@ -2,7 +2,7 @@
 
 export 'preview.copy.gen.dart';
 
-// +mk:copyWith
+// +mk:copyWithMixin
 class UiInsurancePreviewSimpleDataModel {
   final String title;
   final String cta;
