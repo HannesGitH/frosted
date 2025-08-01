@@ -1,16 +1,25 @@
-use notify::{event::{DataChange, ModifyKind}, Event, EventKind, RecursiveMode, Watcher};
-use std::{fs::File, io::{BufReader, Read, Write}, path::Path, sync::mpsc};
-use clap::Parser;
-use std::path::PathBuf;
 use anyhow::Result;
+use clap::Parser;
+use notify::{
+    Event, EventKind, RecursiveMode, Watcher,
+    event::{DataChange, ModifyKind},
+};
+use regex::Regex;
+use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufReader, Read, Write},
+    path::Path,
+    sync::mpsc,
+};
 
 use crate::generate::Generator;
-mod parse;
 mod generate;
+mod parse;
 mod types;
 
 /// frosted: freezed light
-/// watches your files and generates code only where and when needed 
+/// watches your files and generates code only where and when needed
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -29,6 +38,10 @@ struct Args {
     /// files extensions to watch for changes
     #[arg(short, long, value_name = "EXTENSIONS", default_value = "dart")]
     file_extensions: Vec<String>,
+
+    /// file patterns to ignore
+    #[arg(short, long, value_name = "PATTERNS", default_value = "")]
+    ignore_patterns: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -38,13 +51,19 @@ fn main() -> Result<()> {
     let magic_token = args.magic_token;
     let output_file_extension = args.output_file_extension;
     let file_extensions = args.file_extensions;
+    let ignore_patterns = args.ignore_patterns;
 
-    let file_watcher = FileWatcher::new(&directory, &magic_token, &output_file_extension, &file_extensions)?;
+    let file_watcher = FileWatcher::new(
+        &directory,
+        &magic_token,
+        &output_file_extension,
+        &file_extensions,
+        &ignore_patterns,
+    )?;
 
     // this will run forever
     file_watcher.run()
 }
-
 
 struct FileWatcher<'a> {
     rx: mpsc::Receiver<notify::Result<Event>>,
@@ -55,17 +74,35 @@ struct FileWatcher<'a> {
     output_file_extension: String,
     allowed_watch_extensions: Vec<String>,
     generator: Generator<'a>,
+    ignore_patterns: Vec<Regex>,
 }
 
 impl<'a> FileWatcher<'a> {
-    fn new(directory: &Path, magic_token: &str, output_file_extension: &str, file_extensions: &[String]) -> Result<Self> {
+    fn new(
+        directory: &Path,
+        magic_token: &str,
+        output_file_extension: &str,
+        file_extensions: &[String],
+        ignore_patterns: &[String],
+    ) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
         let mut watcher = notify::recommended_watcher(tx)?;
         watcher.watch(Path::new(&directory), RecursiveMode::Recursive)?;
 
         let generator = Generator::new()?;
         // keep the watcher alive
-        Ok(Self { rx, watcher, magic_token: magic_token.to_string(), output_file_extension: output_file_extension.to_string(), allowed_watch_extensions: file_extensions.to_vec(), generator })
+        Ok(Self {
+            rx,
+            watcher,
+            magic_token: magic_token.to_string(),
+            output_file_extension: output_file_extension.to_string(),
+            allowed_watch_extensions: file_extensions.to_vec(),
+            generator,
+            ignore_patterns: ignore_patterns
+                .iter()
+                .map(|pattern| Regex::new(pattern).unwrap())
+                .collect(),
+        })
     }
 
     fn run(&self) -> Result<()> {
@@ -80,17 +117,40 @@ impl<'a> FileWatcher<'a> {
 
     fn handle_event(&self, event: &Event) -> Result<()> {
         if let EventKind::Modify(ModifyKind::Data(DataChange::Content)) = event.kind {
-            self.handle_file_change(event.paths.first().ok_or(anyhow::anyhow!("No path found"))?)?;
+            self.handle_file_change(
+                event
+                    .paths
+                    .first()
+                    .ok_or(anyhow::anyhow!("No path found"))?,
+            )?;
         }
         Ok(())
     }
 
     fn handle_file_change(&self, path: &Path) -> Result<()> {
-        if path.to_str().unwrap().ends_with(&self.output_file_extension) {
+        if path
+            .to_str()
+            .unwrap()
+            .ends_with(&self.output_file_extension)
+        {
             return Ok(());
         }
 
-        if !self.allowed_watch_extensions.iter().any(|ext| path.extension().unwrap_or_default().to_str().unwrap().ends_with(ext)) {
+        if !self.allowed_watch_extensions.iter().any(|ext| {
+            path.extension()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap()
+                .ends_with(ext)
+        }) {
+            return Ok(());
+        }
+
+        if self
+            .ignore_patterns
+            .iter()
+            .any(|pattern| pattern.is_match(path.to_str().unwrap()))
+        {
             return Ok(());
         }
 
@@ -103,7 +163,7 @@ impl<'a> FileWatcher<'a> {
         let mut reader = BufReader::new(file);
         let mut code = String::new();
         reader.read_to_string(&mut code)?;
-    
+
         println!("parsing file: {:?}", path);
         let classes = parse::parse(&code, &self.magic_token)?;
 
@@ -111,11 +171,13 @@ impl<'a> FileWatcher<'a> {
             return Ok(());
         }
 
-        let generated = self.generator.generate(&classes, path.file_name().unwrap().to_str().unwrap())?;
+        let generated = self
+            .generator
+            .generate(&classes, path.file_name().unwrap().to_str().unwrap())?;
         let output_path = path.with_extension(&self.output_file_extension);
         let mut file = File::create(output_path)?;
         file.write_all(generated.as_bytes())?;
-        
+
         Ok(())
     }
 }

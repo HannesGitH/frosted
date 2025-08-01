@@ -1,8 +1,7 @@
+use crate::types::{Class, CopyWithClassType};
 use anyhow::Result;
 use handlebars::Handlebars;
 use serde_json::json;
-use crate::types::{Class, CopyWithClassType};
-
 
 pub struct Generator<'a> {
     handlebars: Handlebars<'a>,
@@ -11,7 +10,10 @@ pub struct Generator<'a> {
 impl<'a> Generator<'a> {
     pub fn new() -> Result<Self> {
         let mut handlebars = Handlebars::new();
-        handlebars.register_template_string("template", include_str!("../../templates/main.dart.handlebars"))?;
+        handlebars.register_template_string(
+            "template",
+            include_str!("../../templates/main.dart.handlebars"),
+        )?;
         Ok(Self { handlebars })
     }
 

@@ -265,6 +265,7 @@ dependencies = [
  "clap",
  "handlebars",
  "notify",
+ "regex",
  "serde_json",
  "tree-sitter",
  "tree-sitter-dart",
