@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use notify::{
     Event, EventKind, RecursiveMode, Watcher,
-    event::{DataChange, ModifyKind},
+    event::{CreateKind, DataChange, ModifyKind},
 };
 use regex::Regex;
 use std::path::PathBuf;
@@ -116,15 +116,16 @@ impl<'a> FileWatcher<'a> {
     }
 
     fn handle_event(&self, event: &Event) -> Result<()> {
-        if let EventKind::Modify(ModifyKind::Data(DataChange::Content)) = event.kind {
-            self.handle_file_change(
+        match event.kind {
+            EventKind::Modify(ModifyKind::Data(DataChange::Content))
+            | EventKind::Create(CreateKind::File) => self.handle_file_change(
                 event
                     .paths
                     .first()
                     .ok_or(anyhow::anyhow!("No path found"))?,
-            )?;
+            ),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     fn handle_file_change(&self, path: &Path) -> Result<()> {
