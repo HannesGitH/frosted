@@ -171,6 +171,7 @@ impl<'a> FileWatcher<'a> {
         if classes.is_empty() {
             return Ok(());
         }
+        println!("found {} classes in file: {:?}", classes.len(), path);
 
         let generated = self
             .generator

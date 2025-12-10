@@ -5,7 +5,7 @@ pub struct Field {
     pub is_nullable: bool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CopyWithClassType {
     Extension,
     Mixin,

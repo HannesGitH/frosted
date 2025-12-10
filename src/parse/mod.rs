@@ -1,6 +1,6 @@
 use crate::types::{Class, CopyWithClassType, Field};
 use anyhow::Result;
-use tree_sitter::{Parser, Tree};
+use tree_sitter::{Parser, Tree, TreeCursor};
 use tree_sitter_dart::language;
 
 pub fn get_tree(code: &str) -> Result<Tree> {
@@ -10,6 +10,32 @@ pub fn get_tree(code: &str) -> Result<Tree> {
         .parse(code, None)
         .ok_or(anyhow::anyhow!("Error parsing Dart code"))?;
     Ok(tree)
+}
+
+fn check_and_handle_class_definition<'a, 'b>(cursor: &'b mut TreeCursor<'a>, prev_node: tree_sitter::Node<'a>, code: &'a str, magic_token: &'a str) ->  Result<Option<(&'a str, tree_sitter::Node<'a>, CopyWithClassType)>> {
+    if cursor.node().kind() == "class_definition" {
+        if prev_node.kind() != "comment" {
+            return Ok(None);
+        };
+        let comment = prev_node.utf8_text(&code.as_bytes()).unwrap();
+        if !comment.contains(magic_token) {
+            return Ok(None);
+        };
+        let copy_with_class_type = if comment.contains("+mk:copyWithMixin") {
+            CopyWithClassType::Mixin
+        } else {
+            CopyWithClassType::Extension
+        };
+        let class_name = cursor
+            .node()
+            .child_by_field_name("name")
+            .unwrap()
+            .utf8_text(&code.as_bytes())
+            .unwrap();
+        let class_body = cursor.node().child_by_field_name("body").unwrap();
+        return Ok(Some((class_name, class_body, copy_with_class_type)));
+    }
+    Ok(None)
 }
 
 pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
@@ -24,27 +50,9 @@ pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
     let mut classes_to_parse = Vec::new();
     let mut prev_node = root_node;
     loop {
-        if cursor.node().kind() == "class_definition" {
-            if prev_node.kind() != "comment" {
-                continue;
-            };
-            let comment = prev_node.utf8_text(&code.as_bytes()).unwrap();
-            if !comment.contains(magic_token) {
-                continue;
-            };
-            let copy_with_class_type = if comment.contains("+mk:copyWithMixin") {
-                CopyWithClassType::Mixin
-            } else {
-                CopyWithClassType::Extension
-            };
-            let class_name = cursor
-                .node()
-                .child_by_field_name("name")
-                .unwrap()
-                .utf8_text(&code.as_bytes())
-                .unwrap();
-            let class_body = cursor.node().child_by_field_name("body").unwrap();
-            classes_to_parse.push((class_name, class_body, copy_with_class_type));
+        let new_class = check_and_handle_class_definition(&mut cursor, prev_node, code, magic_token)?;
+        if let Some(new_class) = new_class {
+            classes_to_parse.push(new_class.clone());
         }
         prev_node = cursor.node();
         if !cursor.goto_next_sibling() {
