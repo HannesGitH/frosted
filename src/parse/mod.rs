@@ -23,8 +23,12 @@ fn check_and_handle_class_definition<'a, 'b>(cursor: &'b mut TreeCursor<'a>, pre
         };
         let copy_with_class_type = if comment.contains("+mk:copyWithMixin") {
             CopyWithClassType::Mixin
-        } else {
+        } else if comment.contains("+mk:copyWithNullableValue") {
+            CopyWithClassType::ExtensionForcingNullableValue
+        } else if comment.contains("+mk:copyWith") {
             CopyWithClassType::Extension
+        } else {
+            anyhow::bail!("Unknown copy with class type: {}", comment);
         };
         let class_name = cursor
             .node()

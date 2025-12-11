@@ -1,6 +1,6 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
 
-export 'preview.copy.gen.dart';
+part 'preview.copy.gen.dart';
 
 // +mk:copyWithMixin
 class UiInsurancePreviewSimpleDataModel {
@@ -18,6 +18,17 @@ class UiInsurancePreviewSimpleDataModel {
 }
 
 // +mk:copyWith
+class UiInsurancePreviewDataModel {
+  final String? avatar;
+  final String tagType;
+
+  const UiInsurancePreviewDataModel({
+    required this.avatar,
+    required this.tagType,
+  });
+}
+
+// +mk:copyWithNullableValue
 class UiInsurancePreviewDataModel {
   final String? avatar;
   final String tagType;

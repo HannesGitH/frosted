@@ -9,6 +9,7 @@ pub struct Field {
 pub enum CopyWithClassType {
     Extension,
     Mixin,
+    ExtensionForcingNullableValue,
 }
 
 #[derive(Debug)]

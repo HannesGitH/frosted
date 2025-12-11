@@ -23,6 +23,7 @@ impl<'a> Generator<'a> {
             "classes": classes.iter().map(|c| json!({
                 "class_name": c.name_str,
                 "is_mixin": c.copy_with_class_type == CopyWithClassType::Mixin,
+                "is_nullable_value": c.copy_with_class_type == CopyWithClassType::ExtensionForcingNullableValue,
                 "fields": c.fields.iter().map(|f| json!({
                     "name_str": f.name_str,
                     "type_str": f.type_str,
