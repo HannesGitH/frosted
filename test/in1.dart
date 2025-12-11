@@ -29,11 +29,11 @@ class UiInsurancePreviewDataModel {
 }
 
 // +mk:copyWithNullableValue
-class UiInsurancePreviewDataModel {
+class UiInsurancePreviewDataModel2 {
   final String? avatar;
   final String tagType;
 
-  const UiInsurancePreviewDataModel({
+  const UiInsurancePreviewDataModel2({
     required this.avatar,
     required this.tagType,
   });
