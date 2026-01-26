@@ -16,7 +16,7 @@ mixin {{class_name}}CopyWith {
     {{/each}}
   }) => {{class_name}}(
     {{#each fields}}
-    {{{name_str}}}: {{name_str}} {{#if is_nullable}} | {{else}} ?? {{/if}} this.{{name_str}},
+    {{{name_str}}}: {{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
     {{/each}}
   );
 }
