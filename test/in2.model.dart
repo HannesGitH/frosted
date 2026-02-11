@@ -8,12 +8,16 @@ class UiInsurancePreviewSimpleDataModel {
   final Set<String?> cta;
   final List<String>? image;
   final List<String> image2;
+  final Map<String, int> mapping;
+  final Map<String, List<int>> nestedMapping;
 
   const UiInsurancePreviewSimpleDataModel({
     required this.title,
     required this.cta,
     required this.image,
     required this.image2,
+    required this.mapping,
+    required this.nestedMapping,
   });
 }
 
