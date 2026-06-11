@@ -56,6 +56,7 @@ Run frosted in your project directory:
 | `-m`, `--magic-token` | Magic token to identify files to parse        | `+mk:`             |
 | `-o`, `--file-extension` | Extension for generated files               | `copy.gen.dart`    |
 | `-e`, `--file-extensions` | File extensions to watch (comma-separated)  | `dart`             |
+| `--format` | Run `dart format` on each generated file (requires the Dart SDK on your `PATH`) | `false` |
 
 #### Examples
 

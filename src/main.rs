@@ -10,6 +10,7 @@ use std::{
     fs::File,
     io::{BufReader, Read, Write},
     path::Path,
+    process::Command,
     sync::mpsc,
 };
 
@@ -42,6 +43,10 @@ struct Args {
     /// file patterns to ignore
     #[arg(short, long, value_name = "PATTERNS", default_value = "")]
     ignore_patterns: Vec<String>,
+
+    /// run `dart format` on each generated file
+    #[arg(long, default_value_t = false)]
+    format: bool,
 }
 
 fn main() -> Result<()> {
@@ -52,6 +57,7 @@ fn main() -> Result<()> {
     let output_file_extension = args.output_file_extension;
     let file_extensions = args.file_extensions;
     let ignore_patterns = args.ignore_patterns;
+    let format = args.format;
 
     let file_watcher = FileWatcher::new(
         &directory,
@@ -59,6 +65,7 @@ fn main() -> Result<()> {
         &output_file_extension,
         &file_extensions,
         &ignore_patterns,
+        format,
     )?;
 
     // this will run forever
@@ -75,6 +82,7 @@ struct FileWatcher<'a> {
     allowed_watch_extensions: Vec<String>,
     generator: Generator<'a>,
     ignore_patterns: Vec<Regex>,
+    format: bool,
 }
 
 impl<'a> FileWatcher<'a> {
@@ -84,6 +92,7 @@ impl<'a> FileWatcher<'a> {
         output_file_extension: &str,
         file_extensions: &[String],
         ignore_patterns: &[String],
+        format: bool,
     ) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
         let mut watcher = notify::recommended_watcher(tx)?;
@@ -102,6 +111,7 @@ impl<'a> FileWatcher<'a> {
                 .iter()
                 .map(|pattern| Regex::new(pattern).unwrap())
                 .collect(),
+            format,
         })
     }
 
@@ -177,9 +187,32 @@ impl<'a> FileWatcher<'a> {
             .generator
             .generate(&classes, path.file_name().unwrap().to_str().unwrap())?;
         let output_path = path.with_extension(&self.output_file_extension);
-        let mut file = File::create(output_path)?;
+        let mut file = File::create(&output_path)?;
         file.write_all(generated.as_bytes())?;
 
+        if self.format {
+            self.format_file(&output_path);
+        }
+
         Ok(())
+    }
+
+    fn format_file(&self, path: &Path) {
+        match Command::new("dart").arg("format").arg(path).output() {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => {
+                println!(
+                    "warning: `dart format` failed for {:?}: {}",
+                    path,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+            }
+            Err(e) => {
+                println!(
+                    "warning: could not run `dart format` for {:?}: {} (is the Dart SDK on your PATH?)",
+                    path, e
+                );
+            }
+        }
     }
 }
