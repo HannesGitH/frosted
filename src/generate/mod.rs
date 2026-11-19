@@ -22,6 +22,8 @@ impl<'a> Generator<'a> {
             "file_name": file_name,
             "classes": classes.iter().map(|c| json!({
                 "class_name": c.name_str,
+                "type_params": c.type_params,
+                "class_type": format!("{}{}", c.name_str, c.type_args),
                 "constructor": c.constructor_str,
                 "is_mixin": c.copy_with_class_type == CopyWithClassType::Mixin,
                 "is_nullable_value": c.copy_with_class_type == CopyWithClassType::ExtensionForcingNullableValue,

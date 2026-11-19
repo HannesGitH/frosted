@@ -5,36 +5,36 @@ part of '{{file_name}}';
 {{#each classes}}
 // ------------------------------------------------------------
 {{#if is_mixin}}
-mixin {{class_name}}CopyWith {
+mixin {{class_name}}CopyWith{{{type_params}}} {
   {{#each fields}}
   {{{type_str_nullable}}} get {{name_str}};
   {{/each}}
 
-  {{class_name}} copyWith({
+  {{{class_type}}} copyWith({
     {{#each fields}}
     {{{type_str_wrapped_nullable_value}}} {{name_str}},
     {{/each}}
-  }) => {{constructor}}(
+  }) => {{{constructor}}}(
     {{#each fields}}
     {{#unless is_positional}}{{{name_str}}}: {{/unless}}{{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
     {{/each}}
   );
 }
 {{else if is_nullable_value}}
-extension {{class_name}}CopyWith on {{class_name}} {
-  {{class_name}} copyWith({
+extension {{class_name}}CopyWith{{{type_params}}} on {{{class_type}}} {
+  {{{class_type}}} copyWith({
     {{#each fields}}
     {{{type_str_wrapped_nullable_value}}} {{name_str}},
     {{/each}}
-  }) => {{constructor}}(
+  }) => {{{constructor}}}(
     {{#each fields}}
     {{#unless is_positional}}{{{name_str}}}: {{/unless}}{{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
     {{/each}}
   );
 }
 {{else}}
-extension {{class_name}}CopyWith on {{class_name}} {
-  {{class_name}} Function({
+extension {{class_name}}CopyWith{{{type_params}}} on {{{class_type}}} {
+  {{{class_type}}} Function({
     {{#each fields}}
     {{{type_str_nullable}}} {{name_str}},
     {{/each}}
@@ -43,7 +43,7 @@ extension {{class_name}}CopyWith on {{class_name}} {
         Object? {{name_str}} = Never,
         {{/each}}
       }) =>
-          {{constructor}}(
+          {{{constructor}}}(
             {{#each fields}}
             {{#unless is_positional}}{{{name_str}}}: {{/unless}}{{name_str}}._or(this.{{name_str}}),
             {{/each}}

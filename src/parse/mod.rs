@@ -136,6 +136,37 @@ fn split_nullable(type_str: String) -> (String, bool) {
     }
 }
 
+/// Type parameters of a class, e.g. for `class Gen<T extends Comparable<T>, @a U>`:
+/// (`<T extends Comparable<T>, U>`, `<T, U>`). Both empty for non generic classes.
+fn parse_type_parameters(class_node: Node, code: &str) -> (String, String) {
+    let Some(type_parameters) = class_node.child_by_field_name("type_parameters") else {
+        return (String::new(), String::new());
+    };
+    let mut declarations = Vec::new();
+    let mut names = Vec::new();
+    let mut cursor = type_parameters.walk();
+    for type_parameter in type_parameters
+        .named_children(&mut cursor)
+        .filter(|n| n.kind() == "type_parameter")
+    {
+        let mut cursor = type_parameter.walk();
+        // skip annotations: the declaration starts at the type parameter's name
+        let Some(name) = type_parameter
+            .named_children(&mut cursor)
+            .find(|n| n.kind() == "type_identifier")
+        else {
+            continue;
+        };
+        let declaration = &code[name.start_byte()..type_parameter.end_byte()];
+        declarations.push(declaration.split_whitespace().collect::<Vec<_>>().join(" "));
+        names.push(name.utf8_text(code.as_bytes()).unwrap());
+    }
+    (
+        format!("<{}>", declarations.join(", ")),
+        format!("<{}>", names.join(", ")),
+    )
+}
+
 fn last_identifier(n: Node) -> Option<Node> {
     let mut cursor = n.walk();
     n.named_children(&mut cursor)
@@ -328,7 +359,8 @@ pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
                 });
             };
         }
-        let mut constructor_str = class_name.to_string();
+        let (type_params, type_args) = parse_type_parameters(class_node, code);
+        let mut constructor_str = format!("{class_name}{type_args}");
         // Dart 3.13 primary constructor: `class const Point._(final int x, {final int? y})`.
         // Its parameters are what copyWith has to pass, the body declarations are only
         // used to look up the types of `this.x` parameters.
@@ -336,13 +368,15 @@ pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
             if let Some(ctor) = primary_constructor.child_by_field_name("name") {
                 let ctor = ctor.utf8_text(code.as_bytes()).unwrap();
                 if ctor != "new" {
-                    constructor_str = format!("{class_name}.{ctor}");
+                    constructor_str = format!("{class_name}{type_args}.{ctor}");
                 }
             }
             fields = parse_primary_constructor_fields(primary_constructor, class_name, &fields, code)?;
         }
         classes_with_fields.push(Class {
             name_str: class_name.to_string(),
+            type_params,
+            type_args,
             constructor_str,
             fields,
             copy_with_class_type,
@@ -375,9 +409,10 @@ mod tests {
                     })
                     .collect();
                 format!(
-                    "{:?} {} via {}: {}",
+                    "{:?} {}{} via {}: {}",
                     c.copy_with_class_type,
                     c.name_str,
+                    c.type_params,
                     c.constructor_str,
                     fields.join(", ")
                 )
@@ -433,7 +468,7 @@ mod tests {
                 "Extension Point via Point: pos int x, pos int? y",
                 "Mixin Named via Named: String? title, Map<String, List<int>> mapping, List<String> tags",
                 "Extension OldStyle via OldStyle: String? avatar, String tagType",
-                "ExtensionForcingNullableValue Gen via Gen._: pos T value, pos List<T>? others",
+                "ExtensionForcingNullableValue Gen<T extends Object> via Gen<T>._: pos T value, pos List<T>? others",
                 "Extension WithThis via WithThis: pos Set<String>? late, int id",
             ]
         );
@@ -444,6 +479,20 @@ mod tests {
         let code = "// +mk:copyWith\nclass A(final int Function(String)? f);\n";
         let classes = parse(code, "+mk:").unwrap();
         assert_eq!(summary(&classes), vec!["Extension A via A: pos int Function(String)? f"]);
+    }
+
+    #[test]
+    fn test_parse_generic_classes() {
+        let code = "// +mk:copyWith\nclass const Gen<T extends Comparable<T>, @a U>._(final T a, final U? b);\n\n// +mk:copyWith\nclass Old<T> {\n  final T v;\n  const Old({required this.v});\n}\n";
+        let classes = parse(code, "+mk:").unwrap();
+        assert_eq!(
+            summary(&classes),
+            vec![
+                "Extension Gen<T extends Comparable<T>, U> via Gen<T, U>._: pos T a, pos U? b",
+                "Extension Old<T> via Old<T>: T v",
+            ]
+        );
+        assert_eq!(classes[0].type_args, "<T, U>");
     }
 
     #[test]
