@@ -18,7 +18,24 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "tree-sitter-dart": "tree-sitter-dart"
+      }
+    },
+    "tree-sitter-dart": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792295434,
+        "narHash": "sha256-JT5iEnWfw0s061sLqeqkMxs/EUfqkFmD3BIMMGSC7IU=",
+        "owner": "UserNobody14",
+        "repo": "tree-sitter-dart",
+        "rev": "0038280b774b65c1b89ba7fec50624d8baed9fe1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "UserNobody14",
+        "repo": "tree-sitter-dart",
+        "type": "github"
       }
     }
   },

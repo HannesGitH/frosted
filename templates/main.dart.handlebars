@@ -14,9 +14,9 @@ mixin {{class_name}}CopyWith {
     {{#each fields}}
     {{{type_str_wrapped_nullable_value}}} {{name_str}},
     {{/each}}
-  }) => {{class_name}}(
+  }) => {{constructor}}(
     {{#each fields}}
-    {{{name_str}}}: {{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
+    {{#unless is_positional}}{{{name_str}}}: {{/unless}}{{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
     {{/each}}
   );
 }
@@ -26,9 +26,9 @@ extension {{class_name}}CopyWith on {{class_name}} {
     {{#each fields}}
     {{{type_str_wrapped_nullable_value}}} {{name_str}},
     {{/each}}
-  }) => {{class_name}}(
+  }) => {{constructor}}(
     {{#each fields}}
-    {{{name_str}}}: {{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
+    {{#unless is_positional}}{{{name_str}}}: {{/unless}}{{name_str}} {{#if is_nullable}}|{{else}}??{{/if}} this.{{name_str}},
     {{/each}}
   );
 }
@@ -43,9 +43,9 @@ extension {{class_name}}CopyWith on {{class_name}} {
         Object? {{name_str}} = Never,
         {{/each}}
       }) =>
-          {{class_name}}(
+          {{constructor}}(
             {{#each fields}}
-            {{{name_str}}}: {{name_str}}._or(this.{{name_str}}),
+            {{#unless is_positional}}{{{name_str}}}: {{/unless}}{{name_str}}._or(this.{{name_str}}),
             {{/each}}
           );
 }

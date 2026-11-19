@@ -76,6 +76,7 @@ fn parse_type_arguments(type_args_node: Node, code: &str) -> String {
 }
 
 fn check_and_handle_class_definition<'a, 'b>(cursor: &'b mut TreeCursor<'a>, prev_node: tree_sitter::Node<'a>, code: &'a str, magic_token: &'a str) ->  Result<Option<(&'a str, tree_sitter::Node<'a>, CopyWithClassType)>> {
+    // returns (class name, class_definition node, copy with type)
     if cursor.node().kind() == "class_definition" {
         if prev_node.kind() != "comment" {
             return Ok(None);
@@ -99,10 +100,147 @@ fn check_and_handle_class_definition<'a, 'b>(cursor: &'b mut TreeCursor<'a>, pre
             .unwrap()
             .utf8_text(&code.as_bytes())
             .unwrap();
-        let class_body = cursor.node().child_by_field_name("body").unwrap();
-        return Ok(Some((class_name, class_body, copy_with_class_type)));
+        return Ok(Some((class_name, cursor.node(), copy_with_class_type)));
     }
     Ok(None)
+}
+
+/// Parse the type of a parameter / declaration from its (named) children:
+/// either the flat `type_identifier` `type_arguments`? `nullable_type`? sequence,
+/// or a single `function_type` / `record_type` node (taken verbatim).
+/// Returns (type without trailing `?`, is_nullable).
+fn parse_param_type(children: &[Node], code: &str) -> Option<(String, bool)> {
+    for (idx, child) in children.iter().enumerate() {
+        match child.kind() {
+            "type_identifier" => {
+                let (type_str, _) = parse_type_from_siblings(children, idx, code)?;
+                return Some(split_nullable(type_str));
+            }
+            "function_type" | "record_type" => {
+                let mut type_str = child.utf8_text(code.as_bytes()).unwrap().to_string();
+                if children.get(idx + 1).is_some_and(|n| n.kind() == "nullable_type") {
+                    type_str.push('?');
+                }
+                return Some(split_nullable(type_str));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn split_nullable(type_str: String) -> (String, bool) {
+    match type_str.strip_suffix('?') {
+        Some(t) => (t.to_string(), true),
+        None => (type_str, false),
+    }
+}
+
+fn last_identifier(n: Node) -> Option<Node> {
+    let mut cursor = n.walk();
+    n.named_children(&mut cursor)
+        .filter(|c| c.kind() == "identifier")
+        .last()
+}
+
+/// Fields of a primary constructor, one per parameter.
+fn parse_primary_constructor_fields(
+    primary_constructor: Node,
+    class_name: &str,
+    body_fields: &[Field],
+    code: &str,
+) -> Result<Vec<Field>> {
+    let text = |n: Node| n.utf8_text(code.as_bytes()).unwrap();
+    let Some(parameters) = primary_constructor.child_by_field_name("parameters") else {
+        anyhow::bail!("Primary constructor of {class_name} has no parameter list");
+    };
+
+    // (formal_parameter, is_positional)
+    let mut formal_parameters = Vec::new();
+    let mut cursor = parameters.walk();
+    for child in parameters.named_children(&mut cursor) {
+        match child.kind() {
+            "formal_parameter" => formal_parameters.push((child, true)),
+            "optional_formal_parameters" => {
+                let is_named = child.child(0).is_some_and(|c| c.kind() == "{");
+                let mut cursor = child.walk();
+                for param in child.named_children(&mut cursor) {
+                    if param.kind() == "formal_parameter" {
+                        formal_parameters.push((param, !is_named));
+                    }
+                }
+            }
+            "comment" | "annotation" => {}
+            _ => anyhow::bail!(
+                "Could not parse the primary constructor of {class_name}: `{}`",
+                text(child)
+            ),
+        }
+    }
+
+    let mut fields = Vec::new();
+    for (param, is_positional) in formal_parameters {
+        let mut cursor = param.walk();
+        let children: Vec<Node> = param.named_children(&mut cursor).collect();
+        let field = |name_str: &str, (type_str, is_nullable): (String, bool)| Field {
+            name_str: name_str.to_string(),
+            type_str,
+            is_nullable,
+            is_positional,
+        };
+
+        match children.first().map(|n| n.kind()) {
+            // `this.x` / `T this.x`: the field is declared in the body
+            Some("constructor_param") => {
+                let this_param = children[0];
+                let name_str = text(last_identifier(this_param).unwrap());
+                let mut cursor = this_param.walk();
+                let this_children: Vec<Node> = this_param.named_children(&mut cursor).collect();
+                if let Some(ty) = parse_param_type(&this_children, code) {
+                    fields.push(field(name_str, ty));
+                } else if let Some(f) = body_fields.iter().find(|f| f.name_str == name_str) {
+                    fields.push(field(name_str, (f.type_str.clone(), f.is_nullable)));
+                } else {
+                    anyhow::bail!("Could not find the type of field `{name_str}` of {class_name}");
+                }
+            }
+            // `T super.x`: the field lives in the superclass, so the type has to be explicit
+            Some("super_formal_parameter") => {
+                let super_param = children[0];
+                let name_str = text(last_identifier(super_param).unwrap());
+                let mut cursor = super_param.walk();
+                let super_children: Vec<Node> = super_param.named_children(&mut cursor).collect();
+                let Some(ty) = parse_param_type(&super_children, code) else {
+                    anyhow::bail!(
+                        "Parameter `super.{name_str}` of {class_name} needs an explicit type (e.g. `int super.{name_str}`)"
+                    );
+                };
+                fields.push(field(name_str, ty));
+            }
+            _ => {
+                let Some(name) = param.child_by_field_name("name") else {
+                    anyhow::bail!(
+                        "Unsupported parameter `{}` in the primary constructor of {class_name}",
+                        text(param)
+                    );
+                };
+                let name_str = text(name);
+                // only declaring parameters (`final` / `var`) introduce a field
+                if !children.iter().any(|n| matches!(n.kind(), "final_builtin" | "inferred_type")) {
+                    anyhow::bail!(
+                        "Parameter `{name_str}` of the primary constructor of {class_name} is not a field (add `final` or `var`), can't generate copyWith"
+                    );
+                }
+                let Some(ty) = parse_param_type(&children, code) else {
+                    anyhow::bail!(
+                        "Parameter `{name_str}` of {class_name} needs an explicit type for copyWith generation"
+                    );
+                };
+                fields.push(field(name_str, ty));
+            }
+        }
+    }
+    Ok(fields)
 }
 
 pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
@@ -129,13 +267,19 @@ pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
 
     // now get the fields in these classes
     let mut classes_with_fields = Vec::new();
-    for (class_name, class_body, copy_with_class_type) in classes_to_parse {
+    for (class_name, class_node, copy_with_class_type) in classes_to_parse {
         let mut fields = Vec::new();
-        let mut cursor = class_body.walk();
-        let field_declarations = class_body
-            .named_children(&mut cursor)
-            .filter(|node| node.kind() == "declaration")
-            .collect::<Vec<_>>();
+        let mut cursor = class_node.walk();
+        // a class with a primary constructor may have a `;` body
+        let field_declarations = class_node
+            .child_by_field_name("body")
+            .map(|class_body| {
+                class_body
+                    .named_children(&mut class_node.walk())
+                    .filter(|node| node.kind() == "declaration")
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         for field_declaration in field_declarations {
             let mut field_name = None;
             let mut field_type = None;
@@ -180,11 +324,26 @@ pub fn parse(code: &str, magic_token: &str) -> Result<Vec<Class>> {
                     name_str: name_str.to_string(),
                     type_str,
                     is_nullable: field_is_nullable,
+                    is_positional: false,
                 });
             };
         }
+        let mut constructor_str = class_name.to_string();
+        // Dart 3.13 primary constructor: `class const Point._(final int x, {final int? y})`.
+        // Its parameters are what copyWith has to pass, the body declarations are only
+        // used to look up the types of `this.x` parameters.
+        if let Some(primary_constructor) = class_node.child_by_field_name("primary_constructor") {
+            if let Some(ctor) = primary_constructor.child_by_field_name("name") {
+                let ctor = ctor.utf8_text(code.as_bytes()).unwrap();
+                if ctor != "new" {
+                    constructor_str = format!("{class_name}.{ctor}");
+                }
+            }
+            fields = parse_primary_constructor_fields(primary_constructor, class_name, &fields, code)?;
+        }
         classes_with_fields.push(Class {
             name_str: class_name.to_string(),
+            constructor_str,
             fields,
             copy_with_class_type,
         });
@@ -198,13 +357,41 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
+    fn summary(classes: &[Class]) -> Vec<String> {
+        classes
+            .iter()
+            .map(|c| {
+                let fields: Vec<String> = c
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        format!(
+                            "{}{}{} {}",
+                            if f.is_positional { "pos " } else { "" },
+                            f.type_str,
+                            if f.is_nullable { "?" } else { "" },
+                            f.name_str
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{:?} {} via {}: {}",
+                    c.copy_with_class_type,
+                    c.name_str,
+                    c.constructor_str,
+                    fields.join(", ")
+                )
+            })
+            .collect()
+    }
+
     #[test]
     fn test_get_tree_in1() {
         let code = include_str!("../../test/in1.dart");
         let tree = get_tree(code).unwrap();
         assert_eq!(
             tree.root_node().to_sexp(),
-            "(program (comment) (part_directive (uri (string_literal))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier) (nullable_type)) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier)) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier)) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))))"
+            "(program (comment) (part_directive (uri (string_literal))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier) (nullable_type)) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier)) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (type_arguments (type_identifier)) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) name: (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) name: (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))) (comment) (class_definition name: (identifier) body: (class_body (declaration (final_builtin) (type_identifier) (nullable_type) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (final_builtin) (type_identifier) (initialized_identifier_list (initialized_identifier (identifier)))) (declaration (constant_constructor_signature (const_builtin) name: (identifier) (formal_parameter_list (optional_formal_parameters (formal_parameter (constructor_param (this) (identifier))) (formal_parameter (constructor_param (this) (identifier))))))))))"
         );
     }
 
@@ -212,20 +399,57 @@ mod tests {
     fn test_parse_in1() {
         let code = include_str!("../../test/in1.dart");
         let classes = parse(code, "+mk:").unwrap();
-        println!("{:?}", classes);
+        assert_eq!(
+            summary(&classes),
+            vec![
+                "Mixin UiInsurancePreviewSimpleDataModel via UiInsurancePreviewSimpleDataModel: String? title, Set<String?> cta, List<String>? image, List<String> image2",
+                "Extension UiInsurancePreviewDataModel via UiInsurancePreviewDataModel: String? avatar, String tagType",
+                "ExtensionForcingNullableValue UiInsurancePreviewDataModel2 via UiInsurancePreviewDataModel2: String? avatar, String tagType",
+            ]
+        );
     }
 
     #[test]
-    fn test_get_tree_in2_multi_type_args() {
-        let code = include_str!("../../test/in2.model.dart");
-        let tree = get_tree(code).unwrap();
-        println!("SEXP: {}", tree.root_node().to_sexp());
-    }
-
-    #[test]
-    fn test_parse_in2() {
+    fn test_parse_in2_multi_type_args() {
         let code = include_str!("../../test/in2.model.dart");
         let classes = parse(code, "+mk:").unwrap();
-        println!("{:?}", classes);
+        assert_eq!(
+            summary(&classes),
+            vec![
+                "Mixin UiInsurancePreviewSimpleDataModel via UiInsurancePreviewSimpleDataModel: String? title, Set<String?> cta, List<String>? image, List<String> image2, Map<String, int> mapping, Map<String, List<int>> nestedMapping",
+                "Extension UiInsurancePreviewDataModel via UiInsurancePreviewDataModel: String? avatar, String tagType",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_in3_primary() {
+        let code = include_str!("../../test/in3.primary.dart");
+        assert!(!get_tree(code).unwrap().root_node().has_error());
+        let classes = parse(code, "+mk:").unwrap();
+        assert_eq!(
+            summary(&classes),
+            vec![
+                "Extension Point via Point: pos int x, pos int? y",
+                "Mixin Named via Named: String? title, Map<String, List<int>> mapping, List<String> tags",
+                "Extension OldStyle via OldStyle: String? avatar, String tagType",
+                "ExtensionForcingNullableValue Gen via Gen._: pos T value, pos List<T>? others",
+                "Extension WithThis via WithThis: pos Set<String>? late, int id",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_primary_function_type() {
+        let code = "// +mk:copyWith\nclass A(final int Function(String)? f);\n";
+        let classes = parse(code, "+mk:").unwrap();
+        assert_eq!(summary(&classes), vec!["Extension A via A: pos int Function(String)? f"]);
+    }
+
+    #[test]
+    fn test_primary_non_declaring_param_errors() {
+        let code = "// +mk:copyWith\nclass A(final int x, int delta);\n";
+        let err = parse(code, "+mk:").unwrap_err().to_string();
+        assert!(err.contains("delta"), "{err}");
     }
 }

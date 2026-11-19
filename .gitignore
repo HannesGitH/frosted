@@ -1,5 +1,8 @@
 .direnv
+# provided by the nix flake (shellHook)
+/vendor
 
 # Added by cargo
 
 /target
+/result

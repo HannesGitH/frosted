@@ -24,7 +24,9 @@ frosted also generates the `copyWith` extension for your classes, making it easy
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (1.70 or newer)
+- [Nix](https://nixos.org/download/) with flakes enabled (optionally [direnv](https://direnv.net/))
+
+The Dart grammar ([UserNobody14/tree-sitter-dart](https://github.com/UserNobody14/tree-sitter-dart)) is provided by the flake: it is pinned in `flake.lock`, patched to tree-sitter 0.25 and linked into `vendor/tree-sitter-dart`. A plain `cargo build` outside the flake environment therefore fails.
 
 ### Installation
 
@@ -33,10 +35,16 @@ Clone the repository and build the binary:
 ```sh
 git clone https://github.com/yourusername/frosted.git
 cd frosted
-cargo build --release
+nix build            # binary at result/bin/frosted
 ```
 
-The binary will be located at `target/release/frosted`.
+For development, enter the dev shell (`nix develop`, or `direnv allow` once) — it creates the `vendor/tree-sitter-dart` link — and use `cargo` as usual:
+
+```sh
+cargo build --release   # binary at target/release/frosted
+```
+
+To update the grammar: `nix flake update tree-sitter-dart`.
 
 ---
 
@@ -98,10 +106,22 @@ class Example {
 
 When you save this file, frosted will generate a corresponding `copy.gen.dart` file in the same directory, including a `copyWith` extension for your class.
 
+### Primary constructors
+
+Classes using Dart's [primary constructors](https://github.com/dart-lang/language/blob/main/accepted/3.13/primary-constructors/feature-specification.md) are supported too:
+
+```dart
+// +mk:copyWith
+class const Point(final int x, {required final int? y});
+```
+
+Every constructor parameter has to map to a field: use a declaring parameter (`final`/`var`), `this.x`, or `T super.x` with an explicit type. Plain parameters such as `int delta` can't be read back from an instance, so frosted reports them as an error. Positional parameters, named constructors (`class Point._(...)`) and `;` bodies all work.
+
 ---
 
 ## 📦 Dependencies
 
+- [tree-sitter](https://crates.io/crates/tree-sitter) + [tree-sitter-dart](https://github.com/UserNobody14/tree-sitter-dart) via the nix flake (Dart parsing, incl. primary constructors)
 - [notify](https://crates.io/crates/notify) (file watching)
 - [clap](https://crates.io/crates/clap) (CLI parsing)
 - [anyhow](https://crates.io/crates/anyhow) (error handling)
